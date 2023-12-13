@@ -1,0 +1,67 @@
+---
+title: "cog_data_v4"
+output: html_document
+  purpose: refine master data into a dataset that I can use for the MICE imputation project
+---
+
+  
+  
+```{r}
+library(readxl)
+library(tidyverse)
+library(dplyr)
+library(magrittr)
+library(writexl)
+```
+
+Import master data file
+
+```{r}
+alltracers <- read.csv("/Users/ella2/Downloads/Alltracers_data_long (2).csv")
+```
+
+Subset to narrow down to data of interest
+
+```{r}
+# filter to year 1 (baseline) only and cognitive testing/demographic data only
+cog_data <- alltracers %>% filter(year == "ses-01", tracer == "Cogtest")
+
+# subset to columns of interest 
+cog_data <- cog_data[ , c(1:7,26:54)]
+
+# further subset down
+# removing z scores, just want raw cognitve data
+cog_data <- cog_data[ , c(1,36,4:7,8,10,12,13,15,16,18,19,21,23:29,31,33,35)]
+
+# view output
+View(cog_data)
+
+```
+
+Arrange by sub_num in ascendidng order
+
+```{r}
+# Convert sub_num to character (in case it's a factor)
+cog_data$sub_num <- as.character(cog_data$sub_num)
+
+# Extract the numeric part of the subject numbers
+numeric_part <- as.numeric(gsub("sub-", "", cog_data$sub_num))
+
+# Arrange the dataframe based on the numeric part in descending order
+cog_data <- cog_data[order(numeric_part), ]
+
+# view output
+View(cog_data)
+
+```
+
+Export
+
+```{r}
+write_xlsx(cog_data, "/Volumes/shr1/Statistics/Cognitive Imputation/cog_data_v4.xlsx")
+```
+
+
+Next Steps:
+1) will need to add in UDS data (MOCA, OTRAILS, uds and aands visit dates) if needed for mice imputation
+2) add in palmqvist early_mask for amyloid suvr
