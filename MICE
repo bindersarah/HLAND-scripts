@@ -1,0 +1,247 @@
+---
+title: "mice_12.6.23_SHB"
+output: html_document
+date: "2023-12-06"
+  purpose: impute values for missing cognitive data using the MICE R package
+---
+
+Install Packages if necessary:
+
+```{r}
+install.packages("mice")
+install.packages("naniar")
+install.packages("UpSetR")
+```
+
+#1. Prepare
+
+Load packages
+
+```{r}
+library(readxl)
+library(writexl)
+library(tidyverse)
+library(dplyr) # for filter etc
+library(magrittr)
+
+library(mice)
+library(naniar)
+library(UpSetR)
+
+```
+
+Import data 
+
+```{r}
+cog_data <- read_excel("/Volumes/shr1/Statistics/Cognitive Imputation/cog_data_v3.xlsx")
+```
+
+Check data types are numeric
+
+```{r}
+# Use lapply to apply the class function to each column
+data_types <- lapply(cog_data, class)
+
+# Convert the result to a vector
+data_types <- unlist(data_types)
+
+# Display the data types
+print(data_types)
+```
+
+Subset to select certain cols
+
+```{r}
+# removing MOCA and OTRAILS
+# removing trails b. Rather, including ba_time and a_time
+# removing gds, cdr, dates of visits
+
+ncol(cog_data) #35
+#View(cog_data)
+
+# remove sub-101 (row 100) and sub-117 (row 115): the extreme outliers
+cog_data <- cog_data[c(1:99,101:114,116:150), ]
+View(cog_data)
+
+cog_aands <- cog_data[ , c(1,4:7,9:12,16:26, 34)]
+colnames(cog_aands)[3] <- "amy_suvr" # rename palmqvist_early_mask to amy_suvr
+View(cog_aands)
+ncol(cog_aands) #21
+
+# subset to just desired cognitive variables
+cog_variables <- cog_aands[ , c(4:21)]
+
+```
+
+#1.5 Sort Data 
+least to most missingness left to right
+
+```{r}
+
+# Calculate the number of missing values per column
+missing_values_count <- sapply(cog_variables, function(x) sum(is.na(x)))
+
+# Create vector of column names sorted by the number of missing values
+sorted_columns <- names(sort(missing_values_count, decreasing = FALSE))
+
+# print vector to confirm correct order
+print(sorted_columns)
+
+# Rearrange the columns based on the sorted order
+cog_variables_sorted <- cog_variables[, sorted_columns]
+
+# Now columns are sorted by the number of missing values from least on the left to most on the right side
+#View(cog_variables_sorted)
+
+```
+
+
+
+#2. Corr Matrix 1
+Run correlation matrix of all cog variables pre-imputation
+
+```{r}
+# use cog_variables_sorted
+
+# try cor with just 2 vars
+cor(cog_variables_sorted$cat_ani_tot, cog_variables_sorted$cat_veg_tot, use = "pairwise.complete.obs") #0.641793
+
+# use argument to deal with missing values or it will just return NA
+# use = "pairwise.complete.obs" considers only the cases where both variables have non-missing values
+cor_matrix <- cor(cog_variables_sorted, use = "pairwise.complete.obs")
+
+# Print the correlation matrix
+print(cor_matrix)
+
+```
+
+
+
+#3. Visualize missingness
+
+```{r}
+# visualize missing COGNITIVE data
+vis_miss(cog_variables_sorted)
+
+# gg_miss_var for missingness in variables
+# show percentages
+gg_miss_var(cog_aands, show_pct = TRUE)
+
+```
+
+
+#4. Create Predictor Matrix
+ 
+ Create matrix of values that will determine what is used to predict other variables
+ For this imputation, will use all cognitive variables to predict the others, 
+ and will exclude subject_number, age, and amyloid_suvr
+ 
+
+```{r}
+ncol(cog_aands) # 21
+
+# create custom predictor matrix
+custom_m <- matrix(1, nrow = 18, ncol = 18, dimnames = list(colnames(cog_variables_sorted), colnames(cog_variables_sorted)))
+
+# removing sub_num, age, suvr from predictor matrix because those vars should'nt be included in imputation
+
+#need to add a 0 diagonally (when col name matches row name)
+num_rows <- nrow(custom_m)
+num_cols <- ncol(custom_m)
+
+# Loop through the rows and columns to set diagonal elements to 0
+for (i in 1:num_rows) {
+  for (j in 1:num_cols) {
+    if (rownames(custom_m)[i] == colnames(custom_m)[j]) {
+      custom_m[i, j] <- 0
+    }
+  }
+}
+
+
+print(custom_m)
+
+```
+
+
+
+#5. PMM- Impute
+seed 30302 
+
+```{r}
+# m = 10
+# select the custom predictor matrix I created 
+# using cog_variables_sorted 
+# seed is random number I set to create reproducible results
+
+cog_multiimp <- mice(cog_variables_sorted, m = 10, maxit = 10, method = "pmm", predictorMatrix = custom_m, seed = 30302)
+
+# print
+print(cog_multiimp)
+
+#complete
+completed_30302 <- complete(cog_multiimp)
+
+# visualize
+View(completed_30302)
+
+# export
+#write_xlsx(completed_30301, "/Volumes/H-LAND/Statistics/Cognitive Imputation/completed_30301.xlsx")
+
+
+
+```
+
+#6. Corr Matrix 2
+ 
+```{r}
+
+# run correlation matrix on completed dataset
+cor_matrix_30302 <- cor(completed_30302)
+
+# Print the correlation matrix
+print(cor_matrix_30302)
+
+# checking only 2 vars with no missing data in original dataset
+cor(completed_30302$cat_ani_tot, completed_30302$cat_veg_tot) #0.641793
+
+
+```
+
+#7.  Compare cor matrices to evaluate model
+
+```{r}
+
+# check that dimensions of matrices are the same
+dim(cor_matrix_30302)
+dim(cor_matrix)
+
+# Compute element-wise differences
+cor_diff <- cor_matrix - cor_matrix_30302
+
+# Check if there are any significant differences
+sig_differences <- any(abs(cor_diff) > 0.05)
+
+# Count the number of significant differences by different thresholds
+sum(abs(cor_diff) > 0.1) # 68
+sum(abs(cor_diff) > 0.01) # 228
+sum(abs(cor_diff) > 0.001) # 274
+sum(cor_diff != 0) # 300
+
+# Display the differences
+print(cor_diff)
+
+# Display the locations of differences
+if (sum(abs(cor_diff) > 0.1) > 0) {
+  cat("Locations of differences:\n")
+  print(which(abs(cor_diff) > 0.1, arr.ind = TRUE))
+} else {
+  cat("The correlation matrices are identical.\n")
+}
+```
+
+
+
+
+
+
