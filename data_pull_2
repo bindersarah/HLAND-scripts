@@ -1,0 +1,41 @@
+
+```{r}
+cest <- read_excel("/Volumes/shr1/Other Projects/working_files_SHB/for Xiang/cest.xlsx")
+
+alltracers <- read.csv("/Users/ella2/Downloads/Alltracers_data (3).csv")
+```
+
+```{r}
+# remove duplicated rows
+alltracers <- alltracers %>% 
+  group_by(sub_num) %>% 
+  slice(1)
+
+View(alltracers)
+nrow(alltracers)
+
+which(colnames(alltracers) == "palmqvist_early_mask") #42
+which(colnames(alltracers) == "braak_all_mask") #76
+
+# select cols for Amyloid and Tau SUVR 
+alltracers_subset <- alltracers[ , c(1, 42, 76)]
+View(alltracers_subset)
+
+
+```
+
+```{r}
+join <- left_join(cest, alltracers_subset, by = "sub_num")
+View(join)
+```
+
+```{r}
+cest_final <- join[ , c(1:6, 10, 11, 9)]
+View(cest_final)
+```
+
+```{r}
+# export 
+
+write_xlsx(cest_final, "/Volumes/shr1/Other Projects/working_files_SHB/for Xiang/cest_final.xlsx")
+```
