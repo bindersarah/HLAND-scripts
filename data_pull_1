@@ -1,0 +1,68 @@
+
+# For Mackenzie
+
+I have a list of participant names who have completed both the 7T MRI and cognitive testing. 
+I need to de-identify them by matching the names to the subject number "sub_num". 
+Then, I will match the sub_num to the desired data to share with a collaborator.
+
+## Import
+  
+```{r}
+all_pts <- read_excel("/Volumes/shr1/Other Projects/working_files_SHB/for Mackenzie/all_participants.xlsx")
+mri_pts <- read_excel("/Volumes/shr1/Other Projects/working_files_SHB/for Mackenzie/7T_participants.xlsx")
+alltracers <- read.csv("/Users/ella2/Downloads/Alltracers_data (3).csv")
+  ```
+
+## Join
+  
+```{r}
+data <- left_join(mri_pts, all_pts, by = c("last_name", "first_name"))
+View(data)
+
+# QC check: 2 participnts names were mispelled in one so the sub-num did not tranfer over
+
+# add in data value
+data[14, 3] <- "sub-65"
+data[16, 3] <- "sub-77"
+
+View(data)
+```
+
+```{r}
+## Data Cleaning
+
+# some are formatted like Sub-01 and some are sub-02
+# all should be lowercase s
+
+data$sub_num <- gsub("Sub", "sub", data$sub_num)
+View(data)
+
+# remove duplicated rows
+alltracers <- alltracers %>% distinct()
+nrow(alltracers)
+View(alltracers)
+
+# another way to remove duplicated rows 
+#alltracers <- alltracers %>% 
+ # group_by(sub_num) %>% 
+  #group_by(year())
+  #slice(1)
+#nrow(alltracers)
+
+alltracers <- alltracers[ ,c(1,2,16:20)]
+View(alltracers)
+
+# cols 16 - 20 has the cognitive composite data
+
+```
+## Final Join
+
+```{r}
+# join data and alltracers 
+all <- left_join(data, alltracers, by = "sub_num")
+View(all)
+```
+## Export
+  
+```{r}
+write_xlsx(all, "/Volumes/shr1/Other Projects/working_files_SHB/for Mackenzie/aands_cog.xlsx")
