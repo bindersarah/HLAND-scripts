@@ -1,0 +1,72 @@
+---
+title: "SCAN"
+output: html_document
+date: "2024-01-31"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+1. scatter plot showing the relation btwn Centiloids & Palmqvist_early_mask,
+-best fit line 
+-dots colored by diagnosis
+-symbol shape by scan_result (if available - don't exclude points that are missing this info).
+2. compute the correlation
+
+#Data
+
+```{r}
+library(readxl)
+library(writexl)
+library(tidyverse)
+library(dplyr) # for filter etc
+library(ggplot2)
+```
+
+
+```{r}
+
+data <- read.csv("/Volumes/H-LAND/HLAND_Output_Data/SCAN_ReturnData/Amyloid_PET_GAAIN.csv")
+View(data)
+```
+
+#1. Scatterplot
+
+Prep for plot
+```{r}
+# make diagnosis a factor for color scale on plots
+data$diag_scan_amy <- factor(data$diag_scan_amy, levels = c(0, 1, 2, 3))
+
+# make diagnosis a factor for color scale on plots
+data$scan_result_amy <- factor(data$scan_result_amy, levels = c(0, 1))
+
+```
+
+
+```{r}
+
+plot <- ggplot(data = data) +
+  geom_point(mapping = aes(
+    x = CENTILOIDS, y = palmqvist_early_mask, color = diag_scan_amy, shape = scan_result_amy)) +
+    geom_smooth(mapping = aes(x = CENTILOIDS, y = palmqvist_early_mask), method = "lm", se = TRUE, color = "black") +  # Add a line of best fit
+  scale_color_manual(values = c("0" = "black", "1" = "blue", "2" = "springgreen3", "3" = "tomato")) +
+   labs(x = "Centiloids", y = "SUVR", title = "", color = "diagnosis") +
+  theme_minimal()
+
+plot
+
+
+#nrow(data) # 67
+
+# change color scheme
+# adding shape removes 2 pts
+
+```
+
+# 2. Correlation
+
+```{r}
+cor(data$CENTILOIDS, data$palmqvist_early_mask) #0.9576368
+```
+
