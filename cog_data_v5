@@ -1,0 +1,240 @@
+---
+title: "cog_data_v5"
+output: html_document
+date: "2024-02-07"
+---
+purpose: refine master data into a dataset that I can use for the MICE imputation project
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+  
+```{r}
+library(readxl)
+library(tidyverse)
+library(dplyr)
+library(magrittr)
+library(writexl)
+```
+
+# 1. Alltracers data
+Import master data file
+
+```{r}
+alltracers <- read.csv("/Users/ella2/Downloads/Alltracers_data_long (2).csv")
+```
+
+Subset to narrow down to data of interest
+
+```{r}
+# filter to year 1 (baseline) only and cognitive testing/demographic data only
+cog_data <- alltracers %>% filter(year == "ses-01", tracer == "Cogtest")
+
+# subset to columns of interest 
+cog_data <- cog_data[ , c(1:7,26:54)]
+
+# further subset down
+# removing z scores, just want raw cognitve data
+cog_data <- cog_data[ , c(1,36,4:7,8,10,12,13,15,16,18,19,21,23:29,31,33,35)]
+
+# view output
+View(cog_data)
+
+```
+
+Arrange by sub_num in ascendidng order
+
+```{r}
+# Convert sub_num to character (in case it's a factor)
+cog_data$sub_num <- as.character(cog_data$sub_num)
+
+# Extract the numeric part of the subject numbers
+numeric_part <- as.numeric(gsub("sub-", "", cog_data$sub_num))
+
+# Arrange the dataframe based on the numeric part in descending order
+cog_data <- cog_data[order(numeric_part), ]
+
+# view output
+View(cog_data)
+
+```
+
+Export
+
+```{r}
+#write_xlsx(cog_data, "/Volumes/shr1/Statistics/Cognitive Imputation/cog_data_v4.xlsx")
+```
+
+#2. Add in data from 10 new enrollments
+
+* re-do once Vanessa returns so we can just pull from alltracers.csv *
+
+Get from Redcap because Vanessa is out so alltracers data is not updated
+In cog_data_v4.. goes up to 154
+
+```{r}
+# import cogdatav4 to skip above steps
+cog_data_v4 <- read_excel("/Volumes/H-LAND/Statistics/Cognitive Imputation/input/cog_data_v4.xlsx")
+```
+
+```{r}
+# add in cog data for subjets after 154 .. from redcap
+new_pts <- read.csv("/Volumes/H-LAND/Other Projects/working_files_SHB/cog imputation/aands data/new_enrollments.csv")
+
+new_pts_demos <- read.csv("/Volumes/H-LAND/Other Projects/working_files_SHB/cog imputation/aands data/new_pts_basic_demos.csv")
+```
+
+```{r}
+# join
+new_pts <- left_join(new_pts_demos, new_pts, by = "hedden_id")
+
+#View(new_pts)
+#View(cog_data_v4)
+
+# get colnames from cog_data_v4
+# then subset new_pts to just those cols
+
+cog_variables <- colnames(cog_data_v4)[7-25] # get column names of all cog vars
+# get indices
+match(cog_variables, colnames(new_pts))
+```
+
+```{r}
+new <- new_pts[ , c(1:6,14,19,22:24,32,36,48,50,59,62,65,68,71,74,78,80,82)]
+View(new) 
+
+ncol(new) # 24
+ncol(cog_data_v4) # 25
+
+# missing b_a in new
+# need to calculate
+
+# get data types
+str(new)
+
+```
+
+##Calculate B - A
+
+A Time
+
+using for loop
+
+```{r}
+
+# Iterate over each row of the data frame
+for (i in 1:nrow(new)) {
+  # Split the time string into minutes and seconds
+  time_parts <- strsplit(new$a_time[i], ":")[[1]]
+  
+  # Convert to seconds as numeric values
+  seconds <- as.numeric(time_parts[2])
+  
+  # Update the b_time column with total seconds
+  new$a_time[i] <- seconds
+}
+
+View(new)
+```
+
+B Time
+
+using for() loop
+
+```{r}
+
+# Iterate over each row of the data frame
+for (i in 1:nrow(new)) {
+  # Split the time string into minutes and seconds
+  time_parts <- strsplit(new$b_time[i], ":")[[1]]
+  
+  # Convert minutes and seconds to numeric values
+  minutes <- as.numeric(time_parts[1])
+  seconds <- as.numeric(time_parts[2])
+  
+  # Calculate total time in seconds
+  total_seconds <- minutes * 60 + seconds
+  
+  # Update the b_time column with total seconds
+  new$b_time[i] <- total_seconds
+}
+
+View(new)
+```
+
+B - A
+
+```{r}
+# check data types
+str(new)
+
+# change data types
+new$a_time <- as.numeric(new$a_time)
+new$b_time <- as.numeric(new$b_time)
+        
+# calculate
+new$b_a <- new$b_time - new$a_time
+
+# reorder
+new <- new[ , c(1:13,25,14:24)]
+View(new)
+```
+
+Change hedden_id to sub_num then merge
+
+```{r}
+#change data type
+new$hedden_id <- as.character(new$hedden_id)
+
+# paste
+new$sub_num <- paste0("sub-", new$hedden_id)
+
+# reorder
+new <- new[ , c(26,2:25)]
+View(new) 
+
+```
+
+#3. Rbind
+
+Change data types so they are the same per column in each dataset
+```{r}
+
+ncol(new)
+ncol(cog_data_v4)
+
+str(new)
+str(cog_data_v4)
+
+# change all vars in new to numeric EXCEPT sub_num
+
+# Convert all columns to numeric
+#new[2:25] <- lapply(new, as.numeric)
+
+
+# for loop to accomplish same goal
+# Iterate over each col of the data frame
+#for (i in 2:ncol(new)) {
+  
+  # mutate to numeric if not numeric already
+  #if(!is.numeric(new[[i]])) {
+   # new[[i]] <- as.numeric(new[[i]])
+
+#  }
+#}
+
+str(new)
+str(cog_data_v4)
+
+  
+```
+
+```{r}
+cog_data_v5 <- rbind(cog_data_v4, new)
+View(cog_data_v5)
+
+
+```
+
+#2.8.24 re-run once sub-165 is added
