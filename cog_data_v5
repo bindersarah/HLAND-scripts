@@ -237,4 +237,9 @@ View(cog_data_v5)
 
 ```
 
-#2.8.24 re-run once sub-165 is added
+#2.8.24
+1. re-run once sub-165 is added
+2. re-run mice 
+- does the seed preserve values even if new subjects
+3. re-run composites/QC
+
