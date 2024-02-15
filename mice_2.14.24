@@ -1,0 +1,543 @@
+---
+title: "mice_2.14.24"
+output: html_document
+date: "2024-02-14"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Install Packages if necessary:
+
+```{r}
+install.packages("readxl")
+install.packages("writexl")
+install.packages("tidyverse")
+install.packages("dplyr")
+install.packages("magrittr")
+```
+
+```{r}
+install.packages("mice")
+install.packages("naniar")
+install.packages("UpSetR")
+```
+
+
+#1. Prepare
+
+Load packages
+
+```{r}
+library(readxl)
+library(writexl)
+library(tidyverse)
+library(dplyr) # for filter etc
+library(magrittr)
+
+library(mice)
+library(naniar)
+library(UpSetR)
+
+```
+
+Import data 
+
+##Feb 8 Update
+
+Note: updated input datasets as of 2.8.24
+
+```{r}
+# includes dx_consent from redcap
+cog_data <- read_excel("/Volumes/H-LAND/Statistics/Cognitive Imputation/input/cog_data_v5.xlsx")
+
+# includes dx_consent(verified/updated) and dx_uds (at baseline if applicable)
+diagnosis <- read_excel("/Volumes/H-LAND/Statistics/Cognitive Imputation/input/diagnosis_12.19.23.xlsx")
+
+```
+
+Check data types: cog_data
+
+```{r}
+# Use lapply to apply the class function to each column
+data_types <- lapply(cog_data, class)
+
+# Convert the result to a vector
+data_types <- unlist(data_types)
+
+# Display the data types
+print(data_types)
+```
+
+Check data types: diagnosis
+
+```{r}
+# Use lapply to apply the class function to each column
+data_types <- lapply(diagnosis, class)
+
+# Convert the result to a vector
+data_types <- unlist(data_types)
+
+# Display the data types
+print(data_types)
+```
+
+## 1.1 Join
+
+Want to use the dx_consent column from 'diagnosis' rather than from 'cog_data'
+- QCd/verified dx is reflected in 'diagnosis' 
+- whereas 'cog_data' would need to be re-run after Vanessa updates all_tracers.csv (some values changed in redcap)
+
+```{r}
+
+# rename 'ptid' to match column names
+colnames(diagnosis)[2] <- "uds_id"
+
+# remove dx_consent from cog_data
+cog_data <- cog_data[ , c(1,3:25)]
+
+# change data type of uds_id to chr 
+cog_data <- cog_data %>% 
+  mutate(uds_id = as.character(uds_id))
+class(cog_data$uds_id)
+
+# View before join
+#View(cog_data)
+#View(diagnosis)
+
+# join
+data <- left_join(cog_data, diagnosis, by = c("sub_num", "uds_id"))
+
+# rearrange order of cols
+data <- data[ , c(1,5,25:28,2:4,6:24)]
+View(data)
+
+```
+
+## 1.2 Create dx_baseline
+
+Add new diagnosis column
+Want to use uds_dx unless there is no value, then use dx_consent
+
+```{r}
+data$dx_baseline <- ifelse(is.na(data$dx_uds), data$dx_consent, data$dx_uds)
+
+data <- data[ , c(1:4,29,5:28)]
+View(data)
+```
+
+## 1.3 Filter
+Exclude out pts with AD (2) or Other (3) diagnosis for purposes of MICE
+
+```{r}
+data_nc_mci <- data %>% 
+  filter(dx_baseline == 0 | dx_baseline == 1)
+
+View(data_nc_mci)
+nrow(data_nc_mci) # 148
+nrow(data) # 163 
+ 
+# excluded 15 subjects
+
+```
+
+## 1.4 Subset
+
+Now select just the cog_variables used in composites
+Removing variables that are colinear or have a limited range, which skewed the results of the model
+
+```{r}
+# keep first col (sub_num)
+cog_variables <- data_nc_mci[, c(1,5,11,12,14,16,18,19,26:28)]
+#View(cog_variables)
+
+# all cog variables
+#cog_variables <- data_nc_mci[, c(5,11,13:16,18:29)]
+
+ncol(cog_variables)
+nrow(cog_variables)
+View(cog_variables)
+
+
+```
+
+
+## 1.5 Sort 
+least to most missingness left to right, because MICE runs left to right
+
+```{r}
+
+# Calculate the number of missing values per column
+missing_values_count <- sapply(cog_variables, function(x) sum(is.na(x)))
+
+# Create vector of column names sorted by the number of missing values
+sorted_columns <- names(sort(missing_values_count, decreasing = FALSE))
+
+# print vector to confirm correct order
+print(sorted_columns)
+
+# Rearrange the columns based on the sorted order
+cog_variables_sorted <- cog_variables[, sorted_columns]
+
+# Now columns are sorted by the number of missing values from least on the left to most on the right side
+View(cog_variables_sorted)
+
+```
+
+
+## 1.6 Create NA col
+To index where imputed data will be after running MICE
+```{r}
+
+# create new cols based on NA values
+cog_variables_sorted$imp_story <- ifelse(is.na(cog_variables_sorted[, 6]), 1, 0)
+cog_variables_sorted$imp_ln <- ifelse(is.na(cog_variables_sorted[, 7]), 1, 0)
+cog_variables_sorted$imp_a <- ifelse(is.na(cog_variables_sorted[, 8]), 1, 0)
+cog_variables_sorted$imp_b_a <- ifelse(is.na(cog_variables_sorted[, 9]), 1, 0)
+cog_variables_sorted$imp_digit <- ifelse(is.na(cog_variables_sorted[, 10]), 1, 0)
+cog_variables_sorted$imp_mmse <- ifelse(is.na(cog_variables_sorted[, 11]), 1, 0)
+
+# create new col summing row-wise across the 5 new columns
+cog_variables_sorted$imp_sum <- rowSums(cog_variables_sorted[, c("imp_story", "imp_ln", "imp_a", "imp_b_a", "imp_digit", "imp_mmse")])
+
+# View
+View(cog_variables_sorted)
+
+```
+
+#2. Visualize missingness
+
+```{r}
+# visualize missing COGNITIVE data
+vis_miss(cog_variables_sorted[ ,c(3:11)])
+
+# gg_miss_var for missingness in variables
+# show percentages
+gg_miss_var(cog_variables_sorted[ ,c(3:11)], show_pct = TRUE)
+
+```
+
+#3. Corr Matrix 1
+Run correlation matrix of all cog variables pre-imputation
+
+```{r}
+# use cog_variables_sorted
+
+# remove non-numeric / non-target variables from the correlation matrix
+cog_vars <- cog_variables_sorted[ ,c(2:11)]
+
+# use argument to deal with missing values or it will just return NA
+# use = "pairwise.complete.obs" considers only the cases where both variables have non-missing values
+cor_matrix <- cor(cog_vars, use = "pairwise.complete.obs")
+
+# Print the correlation matrix
+print(cor_matrix)
+
+```
+
+
+
+#4. Create Predictor Matrix
+ 
+ Create matrix of values that will determine what is used to predict other variables
+ For this imputation: use all cognitive variables to predict the others, in addition ot diagnosis (dx_baseline) 
+ Exclude sub_num and imp cols (columns counting NA values)
+ 
+```{r}
+# ncol for dimensions of matrix
+ncol(cog_variables_sorted) # 18
+
+# Identify columns to exclude from predictors
+exclude_cols <- c(1, 12:18)
+
+# Create custom predictor matrix
+custom_m <- matrix(1, nrow = 18, ncol = 18,
+                   dimnames = list(colnames(cog_variables_sorted), colnames(cog_variables_sorted)))
+
+# Set columns to exclude to 0
+custom_m[ , exclude_cols] <- 0
+
+# Set rows to exclude to 0
+custom_m[exclude_cols, ] <- 0
+
+# Set diagonal elements to 0
+diag(custom_m) <- 0
+
+print(custom_m)
+
+```
+
+Need to convert cols from matrix type to numeric type to run with MICE
+```{r}
+# Specify the columns to convert
+columns_to_convert <- c("imp_story", "imp_ln", "imp_a", "imp_b_a", "imp_digit", "imp_mmse")
+
+# Convert specified columns to numeric
+cog_variables_sorted[, columns_to_convert] <- lapply(cog_variables_sorted[, columns_to_convert], as.numeric)
+
+```
+
+
+#5. PMM- Impute
+seed 30305
+
+```{r}
+# m = 10
+# select the custom predictor matrix I created 
+# using cog_variables_sorted 
+# seed is random number I set to create reproducible results
+
+cog_multiimp <- mice(cog_variables_sorted, m = 10, maxit = 30, method = "pmm", predictorMatrix = custom_m, seed = 30305)
+
+# print
+print(cog_multiimp)
+
+# plot to examine convergence
+plot(cog_multiimp)
+
+```
+##5.1 Complete
+
+```{r}
+# if not specifying action, the default is to take the first imputation
+# action = broad
+# returns a single completed dataset in wide format (stacks all imputed datasets horizontally)
+
+completed_datasets <- complete(cog_multiimp, action = "broad")
+
+View(completed_datasets)
+
+```
+##5.2 Plot
+
+```{r}
+digit <- ggplot(data = completed_datasets) +
+  geom_density(mapping = aes(
+    x = digit_sym.1, color = "blue")) +
+  geom_density(mapping = aes(
+    x = digit_sym.2, color = "green")) +
+  geom_density(mapping = aes(
+    x = digit_sym.3, color = "yellow")) +
+  geom_density(mapping = aes(
+    x = digit_sym.4, color = "orange")) +
+  geom_density(mapping = aes(
+    x = digit_sym.5, color = "red")) +
+  geom_density(mapping = aes(
+    x = digit_sym.6, color = "purple")) +
+  geom_density(mapping = aes(
+    x = digit_sym.7, color = "black")) +
+geom_density(mapping = aes(
+    x = digit_sym.8, color = "gray")) +
+  geom_density(mapping = aes(
+    x = digit_sym.9, color = "turquoise")) +
+  geom_density(mapping = aes(
+    x = digit_sym.10, color = "hotpink"))
+
+digit
+
+a_time <- ggplot(data = completed_datasets) +
+  geom_density(mapping = aes(
+    x = a_time.1, color = "blue")) +
+  geom_density(mapping = aes(
+    x = a_time.2, color = "green")) +
+  geom_density(mapping = aes(
+    x = a_time.3, color = "yellow")) +
+  geom_density(mapping = aes(
+    x = a_time.4, color = "orange")) +
+  geom_density(mapping = aes(
+    x = a_time.5, color = "red")) +
+  geom_density(mapping = aes(
+    x = a_time.6, color = "purple")) +
+  geom_density(mapping = aes(
+    x = a_time.7, color = "black")) +
+geom_density(mapping = aes(
+    x = a_time.8, color = "gray")) +
+  geom_density(mapping = aes(
+    x = a_time.9, color = "turquoise")) +
+  geom_density(mapping = aes(
+    x = a_time.10, color = "hotpink"))
+
+a_time
+
+mmse <- ggplot(data = completed_datasets) +
+  geom_density(mapping = aes(
+    x = mmse_tot.1, color = "blue")) +
+  geom_density(mapping = aes(
+    x = mmse_tot.2, color = "green")) +
+  geom_density(mapping = aes(
+    x = mmse_tot.3, color = "yellow")) +
+  geom_density(mapping = aes(
+    x = mmse_tot.4, color = "orange")) +
+  geom_density(mapping = aes(
+    x = mmse_tot.5, color = "red")) +
+  geom_density(mapping = aes(
+    x = mmse_tot.6, color = "purple")) +
+  geom_density(mapping = aes(
+    x = mmse_tot.7, color = "black")) +
+geom_density(mapping = aes(
+    x = mmse_tot.8, color = "gray")) +
+  geom_density(mapping = aes(
+    x = mmse_tot.9, color = "turquoise")) +
+  geom_density(mapping = aes(
+    x = mmse_tot.10, color = "hotpink"))
+
+mmse
+```
+```{r}
+#library(ggplot2)
+
+# Define custom colors and labels
+custom_colors <- c("blue", "green", "yellow", "orange", "red", "purple", "black", "gray", "turquoise", "hotpink")
+custom_labels <- paste("a_time.", 1:10, sep = "")
+
+# Plot densities with custom colors and labels
+a_time <- ggplot(data = completed_datasets) +
+  geom_density(aes(x = a_time.1, color = "a_time.1")) +
+  geom_density(aes(x = a_time.2, color = "a_time.2")) +
+  geom_density(aes(x = a_time.3, color = "a_time.3")) +
+  geom_density(aes(x = a_time.4, color = "a_time.4")) +
+  geom_density(aes(x = a_time.5, color = "a_time.5")) +
+  geom_density(aes(x = a_time.6, color = "a_time.6")) +
+  geom_density(aes(x = a_time.7, color = "a_time.7")) +
+  geom_density(aes(x = a_time.8, color = "a_time.8")) +
+  geom_density(aes(x = a_time.9, color = "a_time.9")) +
+  geom_density(aes(x = a_time.10, color = "a_time.10")) +
+  scale_color_manual(name = "Variable from Imputed Dataset", values = custom_colors, labels = custom_labels) +
+  labs(x = "Distributions of A Time") +
+  theme_minimal()
+
+# Print the plot
+print(a_time)
+
+```
+
+##5.3 Average
+
+### Index
+Get indices for cols that include imputed data
+
+```{r}
+# Define vector
+columns_to_match <- c("story_units_delay", "ln_total", "a_time", "b_a", "digit_sym", "mmse_tot")
+
+# Initialize a list to store the vectors
+matching_indices_list <- vector("list", length = length(columns_to_match))
+
+# Iterate over each column name
+for (i in seq_along(columns_to_match)) {
+  # Get indices of columns that are similar to the current column name
+  matching_indices <- which(grepl(columns_to_match[i], colnames(completed_datasets)))
+  # Save the indices as a vector in the list
+  matching_indices_list[[i]] <- matching_indices
+}
+
+# Print the list of matching indices
+print(matching_indices_list)
+
+```
+### Subset
+Subset data by imputed cols
+
+```{r}
+
+#assign the indexes to a vector
+story_i <- matching_indices_list[[1]]
+ln_i <- matching_indices_list[[2]]
+a_i <- matching_indices_list[[3]]
+ba_i <- matching_indices_list[[4]]
+digit_i <- matching_indices_list[[5]]
+mmse_i <- matching_indices_list[[6]]
+
+# select the cols that correspond per index
+story_cols <- completed_datasets[ , story_i]
+ln_cols <- completed_datasets[ , ln_i]
+a_cols <- completed_datasets[ , a_i]
+# there was an error with the matching. 
+# these are the cols that actually correspond to b_a
+ba_cols <- completed_datasets[ ,c(9,27,45,63,81,99,117,135,153,171)]
+digit_cols <- completed_datasets[ , digit_i]
+mmse_cols <- completed_datasets[ , mmse_i]
+
+
+```
+### Avg
+Avg Imp
+calc average value across rows
+
+```{r}
+story_cols$story_units_avgimp <- round(rowMeans(story_cols))
+ln_cols$ln_total_avgimp <- round(rowMeans(ln_cols))
+a_cols$a_time_avgimp <- round(rowMeans(a_cols))
+ba_cols$b_a_avgimp <- round(rowMeans(ba_cols))
+digit_cols$digit_sym_avgimp <- round(rowMeans(digit_cols))
+mmse_cols$mmse_tot_avgimp <- round(rowMeans(mmse_cols))
+
+View(mmse_cols)
+```
+
+# Next ****
+1. re-run above averages, attaching sub_num (& maybe other vars)
+2. Join for completed dataset
+3. Export and QC (re-run cor matrix)
+
+
+#6. Corr Matrix 2
+ 
+```{r}
+
+# run correlation matrix on completed dataset
+# subseting to numeric/target variables
+cor_matrix_30304 <- cor(completed_30304[ ,c(2:11)])
+
+# Print the correlation matrix
+print(cor_matrix_30304)
+
+```
+
+#7.  Compare cor matrices
+
+```{r}
+
+# check that dimensions of matrices are the same
+dim(cor_matrix_30304)
+dim(cor_matrix)
+
+#print(cor_matrix_30303)
+#print(cor_matrix)
+
+# Compute element-wise differences
+cor_diff <- cor_matrix - cor_matrix_30304
+
+# Check if there are any significant differences
+sig_differences <- any(abs(cor_diff) > 0.05)
+# count
+sig_differences_count <- sum(abs(cor_diff) > 0.05)
+print(sig_differences_count) # 14
+
+# Count the number of significant differences by different thresholds
+sum(abs(cor_diff) > 0.1) # 0
+sum(abs(cor_diff) > 0.01) # 42
+
+# Display the differences
+print(cor_diff)
+
+# compare nrow
+nrow(completed_30304)
+nrow(cog_variables_sorted)
+# 148 both
+
+```
+#8.  Export 
+
+```{r}
+completed_30304_v2 <- completed_30304
+
+# export
+write_xlsx(completed_30304_v2, "/Volumes/shr1/Statistics/Cognitive Imputation/output/completed_30304_v2.xlsx")
+
+```
+
+
+
+
