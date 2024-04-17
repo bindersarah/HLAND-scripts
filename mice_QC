@@ -1,0 +1,75 @@
+---
+title: "mice_QC_4.17.24_SHB"
+author: "Sarah Binder"
+date: "2024-04-17"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(readxl)
+library(writexl)
+library(tidyverse)
+library(dplyr) # for filter etc
+library(magrittr)
+
+#library(mice)
+#library(naniar)
+#library(UpSetR)
+
+```
+
+```{r}
+# import completed dataset
+completed_30306 <- read_excel("/Volumes/H-LAND/Statistics/Cognitive Imputation/output/completed_30306.xlsx")
+```
+
+For records-keeping purposes can you list the following:
+1. number of subjects in final imputation set
+2. number with missing values in each variable that were imputed
+3. mean, standard deviation, minimum, maximum of non-zero differences in correlations between measures before and after imputation
+4. correlations of each cognitive composite with the other composites before and after imputation
+
+For #3, take the values in the lower diagonal of the matrix, remove any = 0, and compute mean, sd, min and max.
+
+```{r}
+# 1
+# number of subjects in final imputation set
+
+nrow(completed_30306) 
+# n = 141
+
+```
+
+```{r}
+# 2
+# number with missing values in each variable that were imputed
+# so, sum the following cols: imp_story, imp_ln, imp_a, imp_b_a, imp_digit, imp_mmse, imp_sum
+
+# define list of variable names
+variable_names <- c("imp_story", "imp_ln", "imp_a", "imp_b_a", "imp_digit", "imp_mmse", "imp_sum")
+
+#  lapply to apply sum to each variable
+sums <- lapply(variable_names, function(var) sum(completed_30306[[var]]))
+
+# print
+print(sums)
+
+# show sums as a table
+# Convert the list of sums to a data frame or tibble
+result_table <- data.frame(variable = variable_names, sum = unlist(sums))
+
+# Print or view the resulting table
+print(result_table)
+
+```
+
+```{r}
+# 3. see note
+# I use the cor_diff.. try running min(), max() etc 
+```
+
+
