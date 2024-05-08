@@ -1,0 +1,282 @@
+---
+title: "mice_QC_4.17.24_SHB"
+author: "Sarah Binder"
+date: "2024-04-17"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(readxl)
+library(writexl)
+library(tidyverse)
+library(dplyr) # for filter etc
+library(magrittr)
+
+#library(mice)
+#library(naniar)
+#library(UpSetR)
+
+```
+
+```{r}
+# import completed dataset
+completed_30306 <- read_excel("/Volumes/H-LAND/Statistics/Cognitive Imputation/output/completed_30306.xlsx")
+```
+
+For records-keeping purposes can you list the following:
+1. number of subjects in final imputation set
+2. number with missing values in each variable that were imputed
+3. mean, standard deviation, minimum, maximum of non-zero differences in correlations between measures before and after imputation
+4. correlations of each cognitive composite with the other composites before and after imputation
+
+For #3, take the values in the lower diagonal of the matrix, remove any = 0, and compute mean, sd, min and max.
+
+#1. 
+```{r}
+# 1
+# number of subjects in final imputation set
+
+nrow(completed_30306) 
+# n = 141
+
+```
+#2. 
+```{r}
+# 2
+# number with missing values in each variable that were imputed
+# so, sum the following cols: imp_story, imp_ln, imp_a, imp_b_a, imp_digit, imp_mmse, imp_sum
+
+# define list of variable names
+variable_names <- c("imp_story", "imp_ln", "imp_a", "imp_b_a", "imp_digit", "imp_mmse", "imp_sum")
+
+#  lapply to apply sum to each variable
+sums <- lapply(variable_names, function(var) sum(completed_30306[[var]]))
+
+# print
+print(sums)
+
+# show sums as a table
+# Convert the list of sums to a data frame or tibble
+result_table <- data.frame(variable = variable_names, sum = unlist(sums))
+
+# Print or view the resulting table
+print(result_table)
+
+```
+
+```{r}
+# 3. see note
+# I use the cor_diff.. try running min(), max() etc 
+
+#import cor_diff_df
+cor_diff <- read.csv("/Volumes/H-LAND/Statistics/Cognitive Imputation/input/cor_diff_df.csv")
+View(cor_diff)
+
+# manually insert  0 values for story_units_delay cor with itself 
+# which is next to 0 (0.0000000000000001110223) but will skew the min/mean/etc
+cor_diff[5,6] <- 0
+View(cor_diff)
+
+# replace 0s with NA values
+cor_diff <- replace(cor_diff, cor_diff == 0, NA)
+View(cor_diff)
+
+str(cor_diff)
+
+min(cor_diff[ ,c(2:11)], na.rm = TRUE)
+max(cor_diff[ ,c(2:11)], na.rm = TRUE)
+mean(cor_diff[ ,c(2:11)], na.rm = TRUE)
+sd(cor_diff[ ,c(2:11)], na.rm = TRUE)
+summary(cor_diff)
+
+```
+#3. 
+```{r}
+
+# Select all numeric columns except the first one
+numeric_cols <- select(cor_diff, -X) %>% unlist()
+
+# Create a new data frame with a single column containing all numeric values
+new_df <- data.frame(numeric_values = numeric_cols)
+
+#View(new_df)
+
+#summary stats
+min(abs(new_df$numeric_values), na.rm = TRUE)
+max(abs(new_df$numeric_values), na.rm = TRUE)
+
+mean(abs(new_df$numeric_values), na.rm = TRUE)
+sd(abs(new_df$numeric_values), na.rm = TRUE)
+
+#[min] 0.0008687363
+#[max] 0.05122536
+
+#[mean] 0.006504059
+#[sd] 0.02132033
+
+#[mean with abs] 0.01763883
+#[sd with abs] 0.01349962
+
+summary(new_df$numeric_values)
+
+
+```
+```{r}
+# next, locate where min and max are
+
+#max
+# 8,2 and 2,8 in cor_diff contain the max
+
+# Define the target value and tolerance level
+target_value <- 0.05122536
+tolerance <- 1e-6  # You can adjust this tolerance level based on your needs
+
+# Check if any value in the data frame is within the tolerance range of the target value
+any(abs(cor_diff[ , c(2:11)] - target_value) < tolerance, na.rm = TRUE)
+
+# Find the row and column indices where the closest value to the target exists
+# arr.ind = TRUE ensures that the indices are returned as row and column indices.
+which(abs(cor_diff[ , c(2:11)] - target_value) < tolerance, arr.ind = TRUE)
+
+
+```
+
+```{r}
+#min
+# 7,4 and 4,7
+
+# Define the target value and tolerance level
+target_val <- 0.0008687363
+tol <- 1e-10  # You can adjust this tolerance level based on your needs
+
+# Check if any value in the data frame is within the tolerance range of the target value
+# or operator in case negative value
+any(abs(cor_diff[ , c(2:11)] - target_val) < tol | abs(cor_diff[ , c(2:11)] + target_val) < tol, na.rm = TRUE)
+
+# Find the row and column indices where the closest value to the target exists
+# arr.ind = TRUE ensures that the indices are returned as row and column indices.
+which(abs(cor_diff[ , c(2:11)] - target_val) < tol | abs(cor_diff[ , c(2:11)] + target_val) < tol, arr.ind = TRUE)
+
+
+```
+
+#4. 
+```{r}
+# import data containing original composites and composites after imputaton
+data <- read_excel("/Volumes/H-LAND/Statistics/Cognitive Imputation/output/completed_30306_w_comp.xlsx")
+```
+
+```{r}
+# use argument to deal with missing values or it will just return NA
+# use = "pairwise.complete.obs" considers only the cases where both variables have non-missing values
+
+# correlations of each composite with itself pre/post imputation
+cor(data$composite_score_ef, data$imp_composite_score_ef, use = "pairwise.complete.obs")
+cor(data$composite_score_em, data$imp_composite_score_em, use = "pairwise.complete.obs")
+cor(data$composite_score_ps, data$imp_composite_score_ps, use = "pairwise.complete.obs")
+cor(data$pacc, data$imp_pacc, use = "pairwise.complete.obs")
+
+# with completed_30306
+# EF  0.9999712
+# EM 0.9999621
+# PS 0.9997513
+# PACC 0.999674
+```
+
+```{r}
+# correlations of each composite with every other composite pre/post imputation 
+
+# remove non-target variables
+vars <- data[ ,c(19:22,32:35)]
+
+#standardize order of vars
+vars <- vars[ , c(1:4,7,6,5,8)]
+View(vars)
+
+# use argument to deal with missing values or it will just return NA
+# use = "pairwise.complete.obs" considers only the cases where both variables have non-missing values
+cor_matrix_comp <- cor(vars, use = "pairwise.complete.obs")
+
+# Print the correlation matrix
+View(cor_matrix_comp)
+
+
+# export as csv
+write.csv(cor_matrix_comp, "/Volumes/H-LAND/Statistics/Cognitive Imputation/output/cor_matrix_comp_2.csv")
+```
+
+
+
+# cut --- 
+```{r}
+# 3
+# mean, standard deviation, minimum, maximum of non-zero differences in correlations between measures before and after imputation
+
+# need cor matrix of correlations between all measures before and after imputation
+# 1. cor matrix pre- imputation
+# 2. cor matrix post-imputation
+# 3. cor_diff (difference btwn the matrices)
+
+# no,
+# need correlation btwn each measure
+#for example correlate craft pre and craft post 
+
+# to do this
+# 1. combine both datasets (cog_data_v6 and completed_30306)
+# 2. correlate each measure with itself post-imputation
+# 3. calculate descriptive statisics on the correlations 
+
+```
+
+```{r}
+#1.1
+
+cog_data_v6 <- read_excel("/Volumes/H-LAND/Statistics/Cognitive Imputation/input/cog_data_v6.xlsx")
+
+# subset cog_data_v6 to the cols that match completed_30306
+# common column names
+common_cols <- intersect(names(cog_data_v6), names(completed_30306))
+
+# Select only the common columns from cog_data_v6
+cog_data <- cog_data_v6[common_cols]
+
+# select sub_num and only the variables with missing data
+# in original dataset
+cog_data <- cog_data[ , c(1:3,5,6,9,10)]
+View(cog_data)
+
+# in imputed dataset
+completed <- completed_30306[ , c(1,6:11)]
+View(completed)
+
+# join
+data <- left_join(completed, cog_data, by = "sub_num")
+View(data)
+
+```
+
+```{r}
+#1.2
+# use argument to deal with missing values or it will just return NA
+# use = "pairwise.complete.obs" considers only the cases where both variables have non-missing values
+
+cor(data$story_units_delay.x, data$story_units_delay.y, use = "pairwise.complete.obs")
+cor(data$ln_total.x, data$ln_total.y, use = "pairwise.complete.obs")
+cor(data$a_time.x, data$a_time.y, use = "pairwise.complete.obs")
+cor(data$b_a.x, data$b_a.y)
+
+cor(data[ , c(2:13)], use = "pairwise.complete.obs") 
+
+# dropping. NAs so it will always be 1 ... 
+```
+
+
+
+
+
+
+
