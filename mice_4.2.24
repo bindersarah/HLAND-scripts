@@ -41,6 +41,12 @@ library(mice)
 library(naniar)
 library(UpSetR)
 
+# Check the version of the mice package
+packageVersion("mice")
+#‘3.16.0’
+
+R.version
+
 ```
 
 Import data 
@@ -102,15 +108,15 @@ cog_data <- cog_data %>%
 class(cog_data$uds_id)
 
 # View before join
-View(cog_data)
-View(diagnosis)
+#View(cog_data)
+#View(diagnosis)
 
 # join
 data <- left_join(cog_data, diagnosis, by = c("sub_num", "uds_id"))
 
 # rearrange order of cols
 data <- data[ , c(1,5,25:28,2:4,6:24)]
-View(data)
+#View(data)
 
 ```
 
@@ -123,7 +129,7 @@ Want to use uds_dx unless there is no value, then use dx_consent
 data$dx_baseline <- ifelse(is.na(data$dx_uds), data$dx_consent, data$dx_uds)
 
 data <- data[ , c(1:4,29,5:28)]
-View(data)
+#View(data)
 
 ```
 
@@ -134,8 +140,8 @@ Exclude out pts with AD (2) or Other (3) diagnosis for purposes of MICE
 data_nc_mci <- data %>% 
   filter(dx_baseline == 0 | dx_baseline == 1)
 
-View(data_nc_mci)
-nrow(data_nc_mci) # 1
+#View(data_nc_mci)
+nrow(data_nc_mci) # 141
 nrow(data) # 159
  
 # excluded 20 subjects
@@ -150,14 +156,15 @@ Removing variables that are colinear or have a limited range, which skewed the r
 ```{r}
 # keep first col (sub_num)
 cog_variables <- data_nc_mci[, c(1,5,11,12,14,16,18,19,26:28)]
-#View(cog_variables)
+View(cog_variables)
 
 # all cog variables
 #cog_variables <- data_nc_mci[, c(5,11,13:16,18:29)]
 
 ncol(cog_variables)
 nrow(cog_variables)
-View(cog_variables)
+
+#View(cog_variables)
 
 
 ```
@@ -183,6 +190,7 @@ cog_variables_sorted <- cog_variables[, sorted_columns]
 # Now columns are sorted by the number of missing values from least on the left to most on the right side
 View(cog_variables_sorted)
 
+missing_values_count
 ```
 
 
@@ -202,7 +210,7 @@ cog_variables_sorted$imp_mmse <- ifelse(is.na(cog_variables_sorted[, 11]), 1, 0)
 cog_variables_sorted$imp_sum <- rowSums(cog_variables_sorted[, c("imp_story", "imp_ln", "imp_a", "imp_b_a", "imp_digit", "imp_mmse")])
 
 # View
-View(cog_variables_sorted)
+#View(cog_variables_sorted)
 
 ```
 
@@ -480,8 +488,8 @@ ba_cols$b_a_avgimp <- round(rowMeans(ba_cols[ ,c(3:12)]))
 digit_cols$digit_sym_avgimp <- round(rowMeans(digit_cols[ ,c(3:12)]))
 mmse_cols$mmse_tot_avgimp <- round(rowMeans(mmse_cols[ ,c(3:12)]))
 
-View(mmse_cols)
-View(story_cols)
+#View(mmse_cols)
+#View(story_cols)
 ```
 
 ## 5.4 Join
@@ -494,7 +502,7 @@ ba_avg <- ba_cols[ , c(1,2,13)]
 digit_avg <- digit_cols[ , c(1,2,13)]
 mmse_avg <- mmse_cols[ , c(1,2,13)]
 
-View(story_avg)
+#View(story_avg)
 
 nrow(story_avg)
 nrow(ln_avg)
@@ -589,6 +597,13 @@ sum(abs(cor_diff) > 0.01) # 48
 
 # Display the differences
 print(cor_diff)
+
+#save cor_diff as dataframe
+cor_diff_df <- as.data.frame(cor_diff)
+View(cor_diff_df)
+
+# export dataframe
+write.csv(cor_diff_df, file = "/Volumes/H-LAND/Statistics/Cognitive Imputation/input/cor_diff_df.csv", row.names = TRUE)
 
 # compare nrow
 nrow(completed_30306)
