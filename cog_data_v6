@@ -1,0 +1,636 @@
+---
+title: "cog_data_v6"
+author: "Sarah Binder"
+date: "2024-04-03"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+  
+```{r}
+library(readxl)
+library(tidyverse)
+library(dplyr)
+library(magrittr)
+library(writexl)
+```
+
+# Y0
+# Alltracers data
+Import master data file
+*updated as of 3/29/24
+
+```{r}
+alltracers <- read.csv("/Volumes/H-LAND/Other Projects/working_files_SHB/AANDS Key Data/Alltracers data/Alltracers_data_long.csv")
+```
+
+#Subset 
+to narrow down to data of interest
+
+```{r}
+# filter to year 1 (baseline) only and cognitive testing/demographic data only
+cog_data <- alltracers %>% filter(year == "ses-01", tracer == "Cogtest")
+
+which(colnames(cog_data) == "story_units_delay") # 32
+which(colnames(cog_data) == "amnart_viq") #59
+which(colnames(cog_data) == "dx_consent") #60
+
+# subset to columns of interest 
+cog_data <- cog_data[ , c(1:7,32:60)]
+#View(cog_data)
+
+# further subset down
+# removing z scores, just want raw cognitve data
+cog_data <- cog_data[ , c(1,36,4:7,8,10,12,13,15,16,18,19,21,23:29,31,33,35)]
+
+# view output
+
+#View(cog_data)
+
+```
+
+# Arrange 
+by sub_num in ascendidng order
+
+```{r}
+# Convert sub_num to character (in case it's a factor)
+cog_data$sub_num <- as.character(cog_data$sub_num)
+
+# Extract the numeric part of the subject numbers
+numeric_part <- as.numeric(gsub("sub-", "", cog_data$sub_num))
+
+# Arrange the dataframe based on the numeric part in descending order
+cog_data <- cog_data[order(numeric_part), ]
+
+# view output
+#View(cog_data)
+
+```
+
+Exclude subjects with no scan data
+i.e. withdrawn after completeing baseline cog test only
+
+```{r}
+#create list
+exclude_pts <- c("sub-16", "sub-31", "sub-92", "sub-101", "sub-104", "sub-114",
+                 "sub-117", "sub-126", "sub-139", "sub-140", "sub-154")
+
+cog_data <- cog_data %>% filter(!sub_num %in% exclude_pts)
+
+View(cog_data)
+```
+
+
+
+# Export
+
+```{r}
+write_xlsx(cog_data, "/Volumes/H-LAND/Statistics/Cognitive Imputation/input/cog_data_v6.xlsx")
+```
+
+#.
+
+# Y1
+
+
+# Alltracers data
+Import master data file
+*updated as of 4/24/24
+
+```{r}
+alltracers <- read.csv("/Volumes/H-LAND/Other Projects/working_files_SHB/AANDS Key Data/Alltracers data/Alltracers_data_long.csv")
+```
+
+#Subset 
+to narrow down to data of interest
+
+```{r}
+# filter to year 1 (baseline) only and cognitive testing/demographic data only
+cog_data <- alltracers %>% filter(year == "ses-02", tracer == "Cogtest")
+
+which(colnames(cog_data) == "story_units_delay") # 35
+which(colnames(cog_data) == "amnart_viq") #62
+which(colnames(cog_data) == "dx_consent") #63
+
+
+# subset to columns of interest 
+cog_data <- cog_data[ , c(1:7,35:63)]
+#View(cog_data)
+
+# further subset down
+# removing z scores, just want raw cognitve data
+cog_data <- cog_data[ , c(1,36,4:8,10,12,13,15,16,18,19,21,23:29,31,33,35)]
+
+# view output
+#View(cog_data)
+
+```
+
+# Arrange 
+by sub_num in ascendidng order
+
+```{r}
+# Convert sub_num to character (in case it's a factor)
+cog_data$sub_num <- as.character(cog_data$sub_num)
+
+# Extract the numeric part of the subject numbers
+numeric_part <- as.numeric(gsub("sub-", "", cog_data$sub_num))
+
+# Arrange the dataframe based on the numeric part in descending order
+cog_data <- cog_data[order(numeric_part), ]
+
+# view output
+#View(cog_data)
+
+nrow(cog_data) # 136
+
+```
+
+# Exclude subjects 
+##1. with no scan data
+i.e. withdrawn after completeing baseline cog test only
+
+
+```{r}
+#create list
+# pts that never completed a scan at baseline and were removed from Y0
+
+exclude_pts <- c("sub-16", "sub-31", "sub-92", "sub-101", "sub-104", "sub-114",
+                 "sub-117", "sub-126", "sub-139", "sub-140", "sub-154")
+
+cog_data <- cog_data %>% filter(!sub_num %in% exclude_pts)
+
+#View(cog_data)
+
+# Create col to sum the number of NA values row-wise
+cog_data$NA_sum <- rowSums(is.na(cog_data[, 7:25]))
+
+ # if all cols btwn 7:25 are NA, then the subject withdrew or did not complete this year = remove 
+# remove NA_sum == 19
+cog_data <- cog_data %>% filter(!NA_sum == 19)
+
+View(cog_data)
+nrow(cog_data) #116 subjects with Y1 data
+
+
+
+```
+
+Remove pts with AD/other that would not be included in the imputation
+```{r}
+# includes dx_consent(verified/updated) and dx_uds (at baseline if applicable)
+diagnosis <- read_excel("/Volumes/H-LAND/Statistics/Cognitive Imputation/input/diagnosis_4.2.24.xlsx")
+View(diagnosis)
+```
+
+
+## 2. with Dx 2 or 3
+
+```{r}
+
+# dx_consent values match in both 'diagnosis' and 'cog_data'
+# remove dx_consent from cog_data
+cog_data <- cog_data[ , c(1,3:26)]
+
+# rename 'ptid' to match column names
+colnames(diagnosis)[2] <- "uds_id"
+
+typeof(diagnosis$uds_id) # chr
+typeof(cog_data$uds_id) # double
+
+# change data type of uds_id to chr 
+cog_data <- cog_data %>% 
+  mutate(uds_id = as.character(uds_id))
+class(cog_data$uds_id) # chr
+
+# View before join
+#View(cog_data)
+#View(diagnosis)
+
+# join
+data <- left_join(cog_data, diagnosis, by = c("sub_num", "uds_id"))
+ncol(data) # 29
+#View(data)
+
+# rearrange order of cols
+data <- data[ , c(1,5,26:29,2:4,6:25)]
+View(data)
+
+```
+## 3. When missing due to impairment
+# REVISIT
+```{r}
+# sub-36 and sub-72 Y1
+# data was not attempted or attempted but incomplete due to impairment
+```
+
+
+*Create dx_baseline
+
+Add new diagnosis column
+Want to use uds_dx unless there is no value, then use dx_consent
+
+```{r}
+data$dx_baseline <- ifelse(is.na(data$dx_uds), data$dx_consent, data$dx_uds)
+#View(data)
+
+data <- data[ , c(1:4,30,5:29)]
+View(data)
+nrow(data) # 116
+
+```
+
+*Filter by dx
+
+Exclude out pts with AD (2) or Other (3) diagnosis for purposes of MICE
+
+```{r}
+data_nc_mci <- data %>% 
+  filter(dx_baseline == 0 | dx_baseline == 1)
+
+View(data_nc_mci)
+nrow(data_nc_mci) # 101
+nrow(data) # 116
+ 
+# excluded 15 subjects
+
+```
+
+# Select composite cog vars
+
+Subset to just the cog_variables used in composites
+Removing variables that are colinear or have a limited range, which skewed the results of the model
+
+```{r}
+# keep first col (sub_num)
+cog_variables <- data_nc_mci[, c(1,5,11,12,14,16,18,19,26:28)]
+#View(cog_variables)
+
+# all cog variables
+#cog_variables <- data_nc_mci[, c(5,11,13:16,18:29)]
+
+ncol(cog_variables)
+nrow(cog_variables)
+View(cog_variables)
+
+
+```
+
+
+# Visualize missingness
+note: will need to verify if UDS data is available
+```{r}
+# load packages
+#library(naniar)
+#library(UpSetR)
+
+
+# visualize missing COGNITIVE data
+vis_miss(cog_variables[ , c(3:11)])
+
+# gg_miss_var for missingness in variables
+# show percentages
+gg_miss_var(cog_variables[ , c(3:11)])
+
+nrow(cog_variables) # 101
+```
+
+#. 
+# Y2
+
+
+# Alltracers data
+Import master data file
+*updated as of 4/24/24
+
+```{r}
+alltracers <- read.csv("/Volumes/H-LAND/Other Projects/working_files_SHB/AANDS Key Data/Alltracers data/Alltracers_data_long.csv")
+```
+
+#Subset 
+to narrow down to data of interest
+
+```{r}
+# filter to year 1 (baseline) only and cognitive testing/demographic data only
+cog_data <- alltracers %>% filter(year == "ses-03", tracer == "Cogtest")
+
+which(colnames(cog_data) == "story_units_delay") # 35
+which(colnames(cog_data) == "amnart_viq") #62
+which(colnames(cog_data) == "dx_consent") #63
+
+
+# subset to columns of interest 
+cog_data <- cog_data[ , c(1:7,35:63)]
+#View(cog_data)
+
+# further subset down
+# removing z scores, just want raw cognitve data
+cog_data <- cog_data[ , c(1,36,4:8,10,12,13,15,16,18,19,21,23:29,31,33,35)]
+
+# view output
+#View(cog_data)
+
+```
+
+# Arrange 
+by sub_num in ascendidng order
+
+```{r}
+# Convert sub_num to character (in case it's a factor)
+cog_data$sub_num <- as.character(cog_data$sub_num)
+
+# Extract the numeric part of the subject numbers
+numeric_part <- as.numeric(gsub("sub-", "", cog_data$sub_num))
+
+# Arrange the dataframe based on the numeric part in descending order
+cog_data <- cog_data[order(numeric_part), ]
+
+# view output
+#View(cog_data)
+
+nrow(cog_data) # 76
+
+```
+
+# Exclude subjects 
+##1. with no scan data
+i.e. withdrawn after completeing baseline cog test only
+
+
+```{r}
+#create list
+# pts that never completed a scan at baseline and were removed from Y0
+
+exclude_pts <- c("sub-16", "sub-31", "sub-92", "sub-101", "sub-104", "sub-114",
+                 "sub-117", "sub-126", "sub-139", "sub-140", "sub-154")
+
+cog_data <- cog_data %>% filter(!sub_num %in% exclude_pts)
+
+#View(cog_data)
+
+# Create col to sum the number of NA values row-wise
+cog_data$NA_sum <- rowSums(is.na(cog_data[, 7:25]))
+
+ # if all cols btwn 7:25 are NA, then the subject withdrew or did not complete this year = remove 
+# remove NA_sum == 19
+cog_data <- cog_data %>% filter(!NA_sum == 19)
+
+View(cog_data)
+nrow(cog_data) # 66 subjects with Y2 data
+
+
+
+```
+
+Remove pts with AD/other that would not be included in the imputation
+```{r}
+# includes dx_consent(verified/updated) and dx_uds (at baseline if applicable)
+diagnosis <- read_excel("/Volumes/H-LAND/Statistics/Cognitive Imputation/input/diagnosis_4.2.24.xlsx")
+View(diagnosis)
+```
+
+
+## 2. with Dx 2 or 3
+
+```{r}
+
+# dx_consent values match in both 'diagnosis' and 'cog_data'
+# remove dx_consent from cog_data
+cog_data <- cog_data[ , c(1,3:26)]
+
+# rename 'ptid' to match column names
+colnames(diagnosis)[2] <- "uds_id"
+
+typeof(diagnosis$uds_id) # chr
+typeof(cog_data$uds_id) # double
+
+# change data type of uds_id to chr 
+cog_data <- cog_data %>% 
+  mutate(uds_id = as.character(uds_id))
+class(cog_data$uds_id) # chr
+
+# View before join
+#View(cog_data)
+#View(diagnosis)
+
+# join
+data <- left_join(cog_data, diagnosis, by = c("sub_num", "uds_id"))
+ncol(data) # 29
+#View(data)
+
+# rearrange order of cols
+data <- data[ , c(1,5,26:29,2:4,6:25)]
+View(data)
+
+```
+
+*Create dx_baseline
+
+Add new diagnosis column
+Want to use uds_dx unless there is no value, then use dx_consent
+
+```{r}
+data$dx_baseline <- ifelse(is.na(data$dx_uds), data$dx_consent, data$dx_uds)
+#View(data)
+
+data <- data[ , c(1:4,30,5:29)]
+View(data)
+nrow(data) # 66
+
+```
+
+*Filter by dx
+
+Exclude out pts with AD (2) or Other (3) diagnosis for purposes of MICE
+
+```{r}
+data_nc_mci <- data %>% 
+  filter(dx_baseline == 0 | dx_baseline == 1)
+
+# remove sub-13 and sub-72 who by Y2 have more than MCI dx
+data_nc_mci <- data_nc_mci[c(1:9,11:54,56:60), ]
+
+View(data_nc_mci)
+nrow(data_nc_mci) # 58
+nrow(data) # 66
+ 
+# excluded 8 subjects
+
+```
+
+
+
+# Select composite cog vars
+
+Subset to just the cog_variables used in composites
+Removing variables that are colinear or have a limited range, which skewed the results of the model
+
+```{r}
+# keep first col (sub_num)
+cog_variables <- data_nc_mci[, c(1,5,11,12,14,16,18,19,26:28)]
+#View(cog_variables)
+
+# all cog variables
+#cog_variables <- data_nc_mci[, c(5,11,13:16,18:29)]
+
+ncol(cog_variables)
+nrow(cog_variables)
+View(cog_variables)
+
+
+```
+
+
+# Visualize missingness
+note: will need to verify if UDS data is available
+```{r}
+# load packages
+#library(naniar)
+#library(UpSetR)
+
+
+# visualize missing COGNITIVE data
+vis_miss(cog_variables[ , c(3:11)])
+
+# gg_miss_var for missingness in variables
+# show percentages
+gg_miss_var(cog_variables[ , c(3:11)])
+
+nrow(cog_variables) # 58
+
+# update 5.15.24: BC0093 was the only missing, filled in from UDS
+```
+
+
+#.
+# Y3
+
+
+#Subset 
+to narrow down to data of interest
+
+```{r}
+# filter to year 1 (baseline) only and cognitive testing/demographic data only
+cog_data <- alltracers %>% filter(year == "ses-04", tracer == "Cogtest")
+
+which(colnames(cog_data) == "story_units_delay") # 35
+which(colnames(cog_data) == "amnart_viq") #62
+which(colnames(cog_data) == "dx_consent") #63
+
+
+# subset to columns of interest 
+cog_data <- cog_data[ , c(1:7,35:63)]
+#View(cog_data)
+
+# further subset down
+# removing z scores, just want raw cognitve data
+cog_data <- cog_data[ , c(1,36,4:8,10,12,13,15,16,18,19,21,23:29,31,33,35)]
+
+# view output
+#View(cog_data)
+
+```
+
+# Arrange 
+by sub_num in ascendidng order
+
+```{r}
+# Convert sub_num to character (in case it's a factor)
+cog_data$sub_num <- as.character(cog_data$sub_num)
+
+# Extract the numeric part of the subject numbers
+numeric_part <- as.numeric(gsub("sub-", "", cog_data$sub_num))
+
+# Arrange the dataframe based on the numeric part in descending order
+cog_data <- cog_data[order(numeric_part), ]
+
+# view output
+#View(cog_data)
+
+nrow(cog_data) # 27
+
+```
+
+# Exclude subjects 
+##1. with no scan data
+i.e. withdrawn after completeing baseline cog test only
+
+
+```{r}
+#create list
+# pts that never completed a scan at baseline and were removed from Y0
+
+exclude_pts <- c("sub-16", "sub-31", "sub-92", "sub-101", "sub-104", "sub-114",
+                 "sub-117", "sub-126", "sub-139", "sub-140", "sub-154")
+
+cog_data <- cog_data %>% filter(!sub_num %in% exclude_pts)
+
+#View(cog_data)
+
+# Create col to sum the number of NA values row-wise
+cog_data$NA_sum <- rowSums(is.na(cog_data[, 7:25]))
+
+ # if all cols btwn 7:25 are NA, then the subject withdrew or did not complete this year = remove 
+# remove NA_sum == 19
+cog_data <- cog_data %>% filter(!NA_sum == 19)
+
+View(cog_data)
+nrow(cog_data) # 26 subjects with Y2 data
+
+
+
+```
+
+Remove pts with AD/other that would not be included in the imputation
+```{r}
+# includes dx_consent(verified/updated) and dx_uds (at baseline if applicable)
+diagnosis <- read_excel("/Volumes/H-LAND/Statistics/Cognitive Imputation/input/diagnosis_4.2.24.xlsx")
+View(diagnosis)
+```
+
+
+## 2. with Dx 2 or 3
+
+```{r}
+
+# dx_consent values match in both 'diagnosis' and 'cog_data'
+# remove dx_consent from cog_data
+cog_data <- cog_data[ , c(1,3:26)]
+
+# rename 'ptid' to match column names
+colnames(diagnosis)[2] <- "uds_id"
+
+typeof(diagnosis$uds_id) # chr
+typeof(cog_data$uds_id) # double
+
+# change data type of uds_id to chr 
+cog_data <- cog_data %>% 
+  mutate(uds_id = as.character(uds_id))
+class(cog_data$uds_id) # chr
+
+# View before join
+#View(cog_data)
+#View(diagnosis)
+
+# join
+data <- left_join(cog_data, diagnosis, by = c("sub_num", "uds_id"))
+ncol(data) # 29
+#View(data)
+
+# rearrange order of cols
+data <- data[ , c(1,5,26:29,2:4,6:25)]
+View(data)
+
+# no pts with dx listed as 2 or 3 here, except sub-30 should be removed. 
+
+# no missings! 
+# n = 25
+
+```
+#.
+# Y4 
+n=3 in alltracers, actual n = 6 
+
