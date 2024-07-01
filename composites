@@ -1,98 +1,19 @@
 ---
-title: "composites_1.10.24"
+title: "composites_4.3.24"
+author: "Sarah Binder"
+date: "2024-04-03"
 output: html_document
-date: "2024-01-10"
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-##Objective: QC of Imputed Data
 
-1. Create plots like Trey's, except only using the measures relevant per composite
-2. Correlate & plot imputed composites & origianl composites
-  - merge data from alltracers
-
-```{r}
-
-```
-#.
 #Trey's code
 
+```{r}
 #set up libraries (you don't need all of these, so comment out any that won't load or give you errors)
-library(nlme)
-library(ggplot2)
-library(contrast)
-library(car)
-library(plyr)
-library(sjPlot)
-library(mclust)
-library(ppcor)
-library(lavaan)
-library(data.table)
-#library(rgl)
-library(plot3D)
-#library(plotly)
-#library(jtools)
-```{r}
-
-```
-
-##################
-### Data ######
-##################
-
-#Read in NP data file (NOTE: update this to relevant path)
-data=read.table('/Users/thelonious/Documents/Sinai/H-LAND/Statistics/Cognitive Imputation/output/completed_30304.csv', sep=',', header=T, na.strings=c("NA","NaN", " "))
-
-
-# compute z-scores
-
-data$digit_sym_z = (data$digit_sym - mean(data$digit_sym))/sd(data$digit_sym)
-data$a_time_z = (data$a_time - mean(data$a_time))/sd(data$a_time)
-data$story_units_delay_z = (data$story_units_delay - mean(data$story_units_delay))/sd(data$story_units_delay)
-data$fcsrt_recalltot_z = (data$fcsrt_recalltot - mean(data$fcsrt_recalltot))/sd(data$fcsrt_recalltot)
-data$srt_dr_z = (data$srt_dr - mean(data$srt_dr))/sd(data$srt_dr)
-data$cat_fl_tot_z = (data$cat_fl_tot - mean(data$cat_fl_tot))/sd(data$cat_fl_tot)
-data$ln_total_z = (data$ln_total - mean(data$ln_total))/sd(data$ln_total)
-data$b_a_z = (data$b_a - mean(data$b_a))/sd(data$b_a)
-data$mmse_tot_z = (data$mmse_tot - mean(data$mmse_tot))/sd(data$mmse_tot)
-
-data$composite_score_ps = data$digit_sym_z*0.942 + data$a_time_z*0.637
-data$composite_score_em = data$story_units_delay_z*0.534 + data$fcsrt_recalltot_z*0.605 + data$srt_dr_z*0.739
-data$composite_score_ef = data$cat_fl_tot_z*0.622 + data$ln_total_z*0.533 + data$b_a_z*0.666
-data$pacc = data$fcsrt_recalltot_z + data$story_units_delay_z + data$digit_sym_z + data$mmse_tot_z
-
-# plot the z scores by # imputed values 
-```{r}
-plot(data$imp_sum, data$composite_score_ps, xlab=c("#Imputed"), ylab=c("Composite_PS"), main ="", pch=data$dx_baseline)
-plot(data$imp_sum, data$composite_score_ef, xlab=c("#Imputed"), ylab=c("Composite_EF"), main ="", pch=data$dx_baseline)
-plot(data$imp_sum, data$composite_score_em, xlab=c("#Imputed"), ylab=c("Composite_EM"), main ="", pch=data$dx_baseline)
-plot(data$imp_sum, data$pacc, xlab=c("#Imputed"), ylab=c("PACC"), main ="", pch=data$dx_baseline)
-```
-
-plot(data$imp_sum, data$composite_score_ps, xlab=c("#Imputed"), ylab=c("Composite_PS"), main ="", pch=data$dx_baseline)
-plot(data$imp_sum, data$composite_score_ef, xlab=c("#Imputed"), ylab=c("Composite_EF"), main ="", pch=data$dx_baseline)
-plot(data$imp_sum, data$composite_score_em, xlab=c("#Imputed"), ylab=c("Composite_EM"), main ="", pch=data$dx_baseline)
-plot(data$imp_sum, data$pacc, xlab=c("#Imputed"), ylab=c("PACC"), main ="", pch=data$dx_baseline)
-
-# . 
-# Sarah's code
-
-##Packages
-
-```{r}
-#install.packages("contrast")
-install.packages("car")
-```
-
-```{r}
-library(readxl)
-library(writexl)
-library(tidyverse)
-library(dplyr) # for filter etc
-
 
 library(nlme)
 library(ggplot2)
@@ -110,56 +31,126 @@ library(data.table)
 #library(jtools)
 ```
 
-##Import Data
 
 ```{r}
-data=read.table('/Volumes/H-LAND/Statistics/Cognitive Imputation/output/completed_30304.csv', sep=',', header=T, na.strings=c("NA","NaN", " "))
+#Read in NP data file (NOTE: update this to relevant path)
+data=read.table('/Users/thelonious/Documents/Sinai/H-LAND/Statistics/Cognitive Imputation/output/completed_30304.csv', sep=',', header=T, na.strings=c("NA","NaN", " "))
 
-View(data)
-
-alltracers <- read.csv("/Volumes/H-LAND/Other Projects/working_files_SHB/AANDS Key Data/Alltracers data/Alltracers_data_long.csv")
 ```
 
-##Subset cols of interest in alltracers dataset
+Z-scores and composites computed using the imputed dataset (completed_30304)
 
 ```{r}
-# filter to ses-01 & Cogtest since dealing w baseline cog only
-alltracers <- alltracers %>% 
-  filter(year == "ses-01") %>% 
-  filter(tracer == "Cogtest")
+# compute z-scores
+data$digit_sym_z = (data$digit_sym - mean(data$digit_sym))/sd(data$digit_sym)
+data$a_time_z = (data$a_time - mean(data$a_time))/sd(data$a_time)
+data$story_units_delay_z = (data$story_units_delay - mean(data$story_units_delay))/sd(data$story_units_delay)
+data$fcsrt_recalltot_z = (data$fcsrt_recalltot - mean(data$fcsrt_recalltot))/sd(data$fcsrt_recalltot)
+data$srt_dr_z = (data$srt_dr - mean(data$srt_dr))/sd(data$srt_dr)
+data$cat_fl_tot_z = (data$cat_fl_tot - mean(data$cat_fl_tot))/sd(data$cat_fl_tot)
+data$ln_total_z = (data$ln_total - mean(data$ln_total))/sd(data$ln_total)
+data$b_a_z = (data$b_a - mean(data$b_a))/sd(data$b_a)
+data$mmse_tot_z = (data$mmse_tot - mean(data$mmse_tot))/sd(data$mmse_tot)
+
+# compute composite scores
+data$composite_score_ps = data$digit_sym_z*0.942 + data$a_time_z*0.637
+data$composite_score_em = data$story_units_delay_z*0.534 + data$fcsrt_recalltot_z*0.605 + data$srt_dr_z*0.739
+data$composite_score_ef = data$cat_fl_tot_z*0.622 + data$ln_total_z*0.533 + data$b_a_z*0.666
+data$pacc = data$fcsrt_recalltot_z + data$story_units_delay_z + data$digit_sym_z + data$mmse_tot_z
+```
+
+
+```{r}
+# plot the z scores by # imputed values 
+plot(data$imp_sum, data$composite_score_ps, xlab=c("#Imputed"), ylab=c("Composite_PS"), main ="", pch=data$dx_baseline)
+plot(data$imp_sum, data$composite_score_ef, xlab=c("#Imputed"), ylab=c("Composite_EF"), main ="", pch=data$dx_baseline)
+plot(data$imp_sum, data$composite_score_em, xlab=c("#Imputed"), ylab=c("Composite_EM"), main ="", pch=data$dx_baseline)
+plot(data$imp_sum, data$pacc, xlab=c("#Imputed"), ylab=c("PACC"), main ="", pch=data$dx_baseline)
+```
+
+# . 
+# Sarah's code
+#.
+Objectives:
+1. Correlate & plot imputed composites & original composites
+2. Create plots like Trey's, except only using the measures that are relevant per composite
+
+Packages
+```{r}
+#install.packages("contrast")
+install.packages("car")
+```
+
+```{r}
+library(readxl)
+library(writexl)
+library(tidyverse)
+library(dplyr) # for filter etc
+
+
+#library(nlme)
+library(ggplot2)
+#library(contrast)
+#library(car)
+#library(plyr)
+#library(sjPlot)
+#library(mclust)
+#library(ppcor)
+#library(lavaan)
+library(data.table)
+#library(rgl)
+#library(plot3D)
+#library(plotly)
+#library(jtools)
+```
+# prep data
+
+Import Data
+```{r}
+data=read.table('/Volumes/H-LAND/Statistics/Cognitive Imputation/output/completed_30306.csv', sep=',', header=T, na.strings=c("NA","NaN", " "))
+
+#View(data)
+
+#alltracers <- read.csv("/Volumes/H-LAND/Other Projects/working_files_SHB/AANDS Key Data/Alltracers data/Alltracers_data_long.csv")
+
+# using composites Vanessa generated as of 2.21.24
+
+original <- read.csv("/Volumes/H-LAND/RedCap_data/Composite_scores.csv")
+#View(original)
+```
+
+Filter & Subset original
+-Filter to baseline only
+-Subset cols of interest in original
+```{r}
+# filter to ses-01
+original <- original %>% filter(year == "ses-01")
 
 # subset to cols of interest
+original <- original[ , c(2,5:8)]
 
-# get column index
-which(names(alltracers) == "composite_score_ef") 
-which(names(alltracers) == "composite_score_em") 
-which(names(alltracers) == "composite_score_ps") 
-which(names(alltracers) == "pacc")
-
-alltracers <- alltracers[ , c(1:3,22:25)]
-
-View(alltracers)
-nrow(alltracers) # 152
-nrow(data) # 137
+#View(original)
+nrow(original) # 170
+nrow(data) # 150
 
 # note: some participants were removed from imputed dataset, 
 # and some dont have composites in data if missing inputs
 # so, will only do correlations when both values are present
 
+
 ```
 
-##Join
 
+Join
 ```{r}
-# remove extra cols before merging
-alltracers <- alltracers[ , c(1,4:7)]
 
-data <- left_join(data, alltracers, by = "sub_num")
-View(data)
+data <- left_join(data, original, by = "sub_num")
+#View(data)
 ```
 
-##Composites
-compute z-scores & composites with imputed data based on Trey's code
+#composites
+compute z-scores & composites with imputed data
+copied from Trey's code
 
 ```{r}
 # z-scores
@@ -173,111 +164,100 @@ data$ln_total_z = (data$ln_total - mean(data$ln_total))/sd(data$ln_total)
 data$b_a_z = (data$b_a - mean(data$b_a))/sd(data$b_a)
 data$mmse_tot_z = (data$mmse_tot - mean(data$mmse_tot))/sd(data$mmse_tot)
 
+is.na(data$fcsrt_recalltot)
+
+
+#View(data)
+```
+
+```{r}
 # composites
 # adding "imp" to distinguish imputed data is used
 data$imp_composite_score_ps = data$digit_sym_z*0.942 + data$a_time_z*0.637
 data$imp_composite_score_em = data$story_units_delay_z*0.534 + data$fcsrt_recalltot_z*0.605 + data$srt_dr_z*0.739
 data$imp_composite_score_ef = data$cat_fl_tot_z*0.622 + data$ln_total_z*0.533 + data$b_a_z*0.666
 data$imp_pacc = data$fcsrt_recalltot_z + data$story_units_delay_z + data$digit_sym_z + data$mmse_tot_z
-
-View(data)
 ```
 
-#Cor
+
+#cor
 
 ```{r}
-
 # use argument to deal with missing values or it will just return NA
 # use = "pairwise.complete.obs" considers only the cases where both variables have non-missing values
+
+View(data)
+# export to use in mice_QC R project
+write_xlsx(data, "/Volumes/H-LAND/Statistics/Cognitive Imputation/output/completed_30306_w_comp.xlsx")
 
 cor(data$composite_score_ef, data$imp_composite_score_ef, use = "pairwise.complete.obs")
 cor(data$composite_score_em, data$imp_composite_score_em, use = "pairwise.complete.obs")
 cor(data$composite_score_ps, data$imp_composite_score_ps, use = "pairwise.complete.obs")
 cor(data$pacc, data$imp_pacc, use = "pairwise.complete.obs")
 
+# first correlations w completed_30304
 # EF 0.9952902
 # EM 0.9999654
 # PS 0.9968187
 # PACC 0.9999312
 
+# second correlations w completed_30305
+# EF 0.997493
+# EM 0.9999934
+# PS 0.9992178
+# PACC 0.999973
+
+# third correlation w completed_30305 and updated original composites
+# EF 0.9946943
+# EM 0.999976
+# PS 0.9681715
+# PACC 0.9998165
+
+# with completed_30306
+# EF  0.9999712
+# EM 0.9999621
+# PS 0.9997513
+# PACC 0.999674
+
+
+```
+
+#.
+
+```{r}
 # make imp_sum a factor for color scale on plots
 data$imp_sum <- factor(data$imp_sum, levels = c(0, 1, 2, 3, 4, 5))
-
 ```
-#qplot
-using imp_sum as color scale
+
+# ggplot 
+##original
+
+Note: only graphing when both are present, so if pt was missing data, the original composite score is not reflected
 
 ```{r}
-# removes missing values automatically
-
-ef <- qplot(
-  data = data,
-  x = composite_score_ef,
-  y = imp_composite_score_ef,
-  color = data$imp_sum 
-) +
-labs(x = "Original EF", y = "Imputed EF", title = "") +
-theme_minimal()
-
-em <- qplot(
-  data = data,
-  x = composite_score_em,
-  y = imp_composite_score_em,
-  color = data$imp_sum 
-) +
-labs(x = "Original EM", y = "Imputed EM", title = "") +
-theme_minimal()
-
-ps <- qplot(
-  data = data,
-  x = composite_score_ps,
-  y = imp_composite_score_ps,
-  color = data$imp_sum 
-) +
-labs(x = "Original PS", y = "Imputed PS", title = "") +
-theme_minimal()
-
-pacc <- qplot(
-  data = data,
-  x = pacc,
-  y = imp_pacc,
-  color = data$imp_sum 
-) +
-labs(x = "Original PACC", y = "Imputed PACC", title = "") +
-theme_minimal()
-
-ef
-em
-ps
-pacc
-
-```
-# ggplot *
-
-```{r}
-
+  
 ef <- ggplot(data = data) +
   geom_point(mapping = aes(
     x = composite_score_ef, y = imp_composite_score_ef, color = imp_sum)) +
-  scale_color_manual(values = c("0" = "black", "1" = "gold", "2" = "salmon", "3" = "red", "4" = "magenta", "5" = "darkviolet")) +
+  scale_color_manual(values = c("0" = "black", "1" = "darkturquoise", "2" = "red", "3" = "blue", "4" = "magenta", "5" = "darkviolet")) +
   labs(x = "Original EF", y = "Imputed EF", title = "", color = "# of imputed variables") + theme_minimal()
 
 em <- ggplot(data = data) +
   geom_point(mapping = aes(
     x = composite_score_em, y = imp_composite_score_em, color = imp_sum)) +
-  scale_color_manual(values = c("0" = "black", "1" = "gold", "2" = "salmon", "3" = "red", "4" = "magenta", "5" = "darkviolet")) +
+  scale_color_manual(values = c("0" = "black", "1" = "darkturquoise", "2" = "red", "3" = "blue", "4" = "magenta", "5" = "darkviolet")) +
   labs(x = "Original EM", y = "Imputed EM", title = "", color = "# of imputed variables") + theme_minimal()
 
 ps <- ggplot(data = data) +
   geom_point(mapping = aes(
     x = composite_score_ps, y = imp_composite_score_ps, color = imp_sum)) +
-  scale_color_manual(values = c("0" = "black", "1" = "gold", "2" = "salmon", "3" = "red", "4" = "magenta", "5" = "darkviolet")) +
+  scale_color_manual(values = c("0" = "black", "1" = "darkturquoise", "2" = "red", "3" = "blue", "4" = "magenta", "5" = "darkviolet")) +
   labs(x = "Original PS", y = "Imputed PS", title = "", color = "# of imputed variables") + theme_minimal()
 
 pacc <- ggplot(data = data) +
   geom_point(mapping = aes(
     x = pacc, y = imp_pacc, color = imp_sum)) +
-  scale_color_manual(values = c("0" = "black", "1" = "gold", "2" = "salmon", "3" = "red", "4" = "magenta", "5" = "darkviolet")) +
+  scale_color_manual(values = c("0" = "black", "1" = "darkturquoise", "2" = "red", "3" = "blue", "4" = "magenta", "5" = "darkviolet")) +
   labs(x = "Original PACC", y = "Imputed PACC", title = "", color = "# of imputed variables") + theme_minimal()
 
 ef
@@ -285,51 +265,50 @@ em
 ps
 pacc
 
+#colors()
+
 ```
 
-Note: only graphing when both are present, so if pt was missing data, the original composite score is not reflected
 
-Next: using imp for specific variables (example EF: cat_fl, ln, & b_a)
-.. not necessary
+##annotated ef *
+
+In order to annotate the points falling below the line, 
+need to find a way to subset the data and then use that subset as a scale applied to ggplot
+
+Calculate ratio between original and imputed composite score
+
 ```{r}
-# EF: only ln or b_a could have been imputed
-
-# create new col that sums across these 2 rows
-data <- data %>% 
-  mutate(imp_ln_b_a = imp_ln + imp_b_a)
+# diff
+data$diff_ef <- data$composite_score_ef - data$imp_composite_score_ef
+#ratio
+data$ratio_ef <- data$composite_score_ef / data$imp_composite_score_ef
 View(data)
 
-# make factor 
-data$imp_ln_b_a <- factor(data$imp_ln_b_a, levels = c(0, 1, 2))
+# if ratio we expect is 1, then identify subjects where the ratio is far off from 1
+data_by_ratio <- data %>% 
+  filter(abs(ratio_ef) > 1.3 | abs(ratio_ef) < 0.7)
 
-# plot
-ef_2 <- ggplot(data = data) +
-  geom_point(mapping = aes(
-    x = composite_score_ef, y = imp_composite_score_ef, color = imp_ln_b_a)) +
-  scale_color_manual(values = c("0" = "black", "1" = "red", "2" = "magenta")) +
-  labs(x = "Original EF", y = "Imputed EF", title = "", color = "# of imputed (ln or b_a)") + theme_minimal()
+View(data_by_ratio)
 
-ef_2
 ```
 
-
-#Recreate Trey's plots
-Using only measures involved in composites
-
-# revisit **
-objective 1
+Annotated plot for EF 
 
 ```{r}
-# ps
-# digit sym
-# a time
-
-# create col where either value in a_time or digit was imputed
-data$imp_a_digit <- ifelse(data$imp_a == 1, 1, ifelse(data$imp_digit == 1, 1, 0))
+# annotated using data_by_ratio
+# so only pts where the ratio between original and imputed composite is < 0.8 or > 1.1
 
 # plot
-plot(data$imp_a_digit, data$composite_score_ps, xlab=c("#Imputed A"), ylab=c("Composite_PS"), main ="", pch=data$dx_baseline)
+ef_line <- ggplot(data = data) +
+  geom_point(mapping = aes(
+    x = composite_score_ef, y = imp_composite_score_ef, color = imp_sum)) +
+  geom_smooth(mapping = aes(x = composite_score_ef, y = imp_composite_score_ef), method = "lm", se = FALSE, color = "black") +  # Add a line of best fit
+  annotate("text", x = data_by_ratio$composite_score_ef, y = data_by_ratio$imp_composite_score_ef, size = 2, label = data_by_ratio$sub_num,   vjust = 1.5, hjust = 0.5) +
+  scale_color_manual(values = c("0" = "black", "1" = "darkturquoise", "2" = "red", "3" = "blue", "4" = "magenta", "5" = "darkviolet")) +
+  labs(x = "Original EF", y = "Imputed EF", title = "", color = "# of imputed variables") +
+  theme_minimal()  # Annotate points below the line
 
-
+ef_line
 ```
+
 
